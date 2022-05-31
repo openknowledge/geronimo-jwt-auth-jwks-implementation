@@ -45,7 +45,7 @@ public class PreProvidedTokenTest extends Arquillian {
     @ArquillianResource
     private URL base;
 
-    @Test
+
     public void runAsync() {
         final Client client = ClientBuilder.newClient();
         try {

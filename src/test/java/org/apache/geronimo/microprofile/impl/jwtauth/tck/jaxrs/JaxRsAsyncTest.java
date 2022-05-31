@@ -47,7 +47,7 @@ public class JaxRsAsyncTest extends Arquillian {
     @ArquillianResource
     private URL base;
 
-    @Test(timeOut = 60000)
+
     public void runAsync() throws Exception {
         final Client client = ClientBuilder.newClient();
         try {
