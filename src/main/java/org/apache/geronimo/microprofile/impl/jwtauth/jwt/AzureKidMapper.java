@@ -108,7 +108,10 @@ public class AzureKidMapper extends KidMapper {
           PemWriter pemWriter = new PemWriter(new OutputStreamWriter(byteArrayOutputStream));
           pemWriter.writeObject(pemObject);
           pemWriter.close();
-          keyMapping.put(jsonWebKeySet.getKeyID(), byteArrayOutputStream.toString());
+          String pemKey = byteArrayOutputStream.toString();
+          pemKey = pemKey.replace("\r","");
+          pemKey = pemKey.replace("\n","");
+          keyMapping.put(jsonWebKeySet.getKeyID(), pemKey);
         }
       } catch (IOException | ParseException | JOSEException e) {
         e.printStackTrace();
