@@ -53,13 +53,13 @@ public class AzureKidMapper extends KidMapper {
 
   @PostConstruct
   private void init() {
-    jwksUrl = config.read("keys.location", null);
-    jwksUrl = jwksUrl.trim();
-    try {
-      cacheJsonWebKeySet();
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    //jwksUrl = config.read("keys.location", null);
+    //jwksUrl = jwksUrl.trim();
+    //try {
+    //  cacheJsonWebKeySet();
+    //} catch (Exception e) {
+    //  e.printStackTrace();
+    //}
 
     ofNullable(config.read("kids.key.mapping", null))
       .map(String::trim)
@@ -122,42 +122,13 @@ public class AzureKidMapper extends KidMapper {
   public String loadKey(final String property) {
     String value = keyMapping.get(property);
     if (value == null) {
-      value = tryLoad(property);
-      if (value != null && !property.equals(value) /* else we can leak easily*/) {
-        keyMapping.putIfAbsent(property, value);
-      } else if (defaultKey != null) {
-        value = defaultKey;
-      }
+      cacheJsonWebKeySet();
+      value = keyMapping.get(property);
     }
     return value;
   }
 
   public Collection<String> loadIssuers(final String property) {
     return issuerMapping.getOrDefault(property, defaultIssuers);
-  }
-
-  private String tryLoad(final String value) {
-    // try external file
-    final File file = new File(value);
-    if (file.exists()) {
-      try {
-        return Files.readAllLines(file.toPath()).stream().collect(joining("\n"));
-      } catch (final IOException e) {
-        throw new IllegalArgumentException(e);
-      }
-    }
-
-    // if not found try classpath resource
-    try (final InputStream stream = Thread.currentThread().getContextClassLoader()
-      .getResourceAsStream(value)) {
-      if (stream != null) {
-        return new BufferedReader(new InputStreamReader(stream)).lines().collect(joining("\n"));
-      }
-    } catch (final IOException e) {
-      throw new IllegalArgumentException(e);
-    }
-
-    // else direct value
-    return value;
   }
 }
