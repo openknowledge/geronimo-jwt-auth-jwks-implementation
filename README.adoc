@@ -2,6 +2,8 @@
 
 == Artifacts
 
+IMPORTANT: This version works exclusively with a json web key set (JWKS)
+
 === API
 
 IMPORTANT: you can also use the eclipse bundle.
@@ -41,6 +43,7 @@ and if not system properties and `META-INF/geronimo/microprofile/jwt-auth.proper
 |geronimo.jwt-auth.filter.mapping.default|When the JAX-RS `Application` doesn't have an `@ApplicationPath` and no servlet registration are found for the application this defines the path to use to handle JWT|/*
 |geronimo.jwt-auth.filter.publicUrls|List of URL to ignore|-
 |geronimo.jwt-auth.kids.key.mapping|The mapping between the kid and the public key to use|-
+|geronimo.jwt-auth.keys.location|The JWKS Url to use|-
 |geronimo.jwt-auth.kids.issuer.mapping|The mapping of the issuer expected per kid|-
 |geronimo.jwt-auth.issuer.default|The default issuer to use when no mapping is found|-
 |geronimo.jwt-auth.cookie.name|The cookie name to read the JWT, note that header is read before in any case.|Bearer
