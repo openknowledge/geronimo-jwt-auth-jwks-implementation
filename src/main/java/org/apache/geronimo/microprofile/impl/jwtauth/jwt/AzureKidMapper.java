@@ -53,8 +53,8 @@ public class AzureKidMapper extends KidMapper {
 
   @PostConstruct
   private void init() {
-    //jwksUrl = config.read("keys.location", null);
-    //jwksUrl = jwksUrl.trim();
+    jwksUrl = config.read("keys.location", null);
+    jwksUrl = jwksUrl.trim();
     //try {
     //  cacheJsonWebKeySet();
     //} catch (Exception e) {
