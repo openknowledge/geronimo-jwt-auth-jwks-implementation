@@ -1,17 +1,11 @@
 package org.apache.geronimo.microprofile.impl.jwtauth.jwt;
 
 import static java.util.Optional.ofNullable;
-import static java.util.stream.Collectors.joining;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URL;
-import java.nio.file.Files;
 import java.security.PublicKey;
 import java.text.ParseException;
 import java.util.Collection;
@@ -55,11 +49,7 @@ public class AzureKidMapper extends KidMapper {
   private void init() {
     jwksUrl = config.read("keys.location", null);
     jwksUrl = jwksUrl.trim();
-    //try {
-    //  cacheJsonWebKeySet();
-    //} catch (Exception e) {
-    //  e.printStackTrace();
-    //}
+    cacheJsonWebKeySet();
 
     ofNullable(config.read("kids.key.mapping", null))
       .map(String::trim)
@@ -109,8 +99,8 @@ public class AzureKidMapper extends KidMapper {
           pemWriter.writeObject(pemObject);
           pemWriter.close();
           String pemKey = byteArrayOutputStream.toString();
-          pemKey = pemKey.replace("\r","");
-          pemKey = pemKey.replace("\n","");
+          pemKey = pemKey.replace("\r", "");
+          pemKey = pemKey.replace("\n", "");
           keyMapping.put(jsonWebKeySet.getKeyID(), pemKey);
         }
       } catch (IOException | ParseException | JOSEException e) {
