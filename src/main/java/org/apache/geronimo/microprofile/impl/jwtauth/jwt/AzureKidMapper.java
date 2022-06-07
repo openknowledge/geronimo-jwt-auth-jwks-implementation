@@ -1,11 +1,17 @@
 package org.apache.geronimo.microprofile.impl.jwtauth.jwt;
 
 import static java.util.Optional.ofNullable;
+import static java.util.stream.Collectors.joining;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URL;
+import java.nio.file.Files;
 import java.security.PublicKey;
 import java.text.ParseException;
 import java.util.Collection;
@@ -112,13 +118,46 @@ public class AzureKidMapper extends KidMapper {
   public String loadKey(final String property) {
     String value = keyMapping.get(property);
     if (value == null) {
+      String keyFromFileSystem = tryLoad(property);
       cacheJsonWebKeySet();
-      value = keyMapping.get(property);
+
+      boolean doesKeyFromFileExist = keyFromFileSystem != null && !keyFromFileSystem.equals(property);
+      if (doesKeyFromFileExist) {
+        value = keyFromFileSystem;
+      } else {
+        value = keyMapping.get(property);
+      }
     }
     return value;
   }
 
   public Collection<String> loadIssuers(final String property) {
     return issuerMapping.getOrDefault(property, defaultIssuers);
+  }
+
+
+  private String tryLoad(final String value) {
+    // try external file
+    final File file = new File(value);
+    if (file.exists()) {
+      try {
+        return Files.readAllLines(file.toPath()).stream().collect(joining("\n"));
+      } catch (final IOException e) {
+        throw new IllegalArgumentException(e);
+      }
+    }
+
+    // if not found try classpath resource
+    try (final InputStream stream = Thread.currentThread().getContextClassLoader()
+      .getResourceAsStream(value)) {
+      if (stream != null) {
+        return new BufferedReader(new InputStreamReader(stream)).lines().collect(joining("\n"));
+      }
+    } catch (final IOException e) {
+      throw new IllegalArgumentException(e);
+    }
+
+    // else direct value
+    return value;
   }
 }
