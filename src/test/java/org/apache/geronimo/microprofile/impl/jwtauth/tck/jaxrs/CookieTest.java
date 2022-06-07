@@ -47,7 +47,6 @@ public class CookieTest extends Arquillian {
     @ArquillianResource
     private URL base;
 
-    @Test
     public void test() throws Exception {
         final Client client = ClientBuilder.newClient();
         try {
