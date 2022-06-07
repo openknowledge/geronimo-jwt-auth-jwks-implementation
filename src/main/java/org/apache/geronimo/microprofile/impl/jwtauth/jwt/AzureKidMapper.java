@@ -120,12 +120,15 @@ public class AzureKidMapper extends KidMapper {
     if (value == null) {
       String keyFromFileSystem = tryLoad(property);
       cacheJsonWebKeySet();
-
+      String keyFromCache = keyMapping.get(property);
+      boolean isInCache = keyFromCache != null;
       boolean doesKeyFromFileExist = keyFromFileSystem != null && !keyFromFileSystem.equals(property);
       if (doesKeyFromFileExist) {
         value = keyFromFileSystem;
+      } else if (isInCache) {
+        value = keyFromCache;
       } else {
-        value = keyMapping.get(property);
+        value = defaultKey;
       }
     }
     return value;
