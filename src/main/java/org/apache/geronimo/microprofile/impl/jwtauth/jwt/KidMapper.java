@@ -68,13 +68,13 @@ public class KidMapper {
     @Inject
     private GeronimoJwtAuthConfig config;
 
-    private final ConcurrentMap<String, String> keyMapping = new ConcurrentHashMap<>();
+    private volatile ConcurrentMap<String, String> keyMapping = new ConcurrentHashMap<>();
     private final Map<String, Collection<String>> issuerMapping = new HashMap<>();
     private String defaultKey;
     private String jwksUrl;
     private Set<String> defaultIssuers;
     private JsonReaderFactory readerFactory;
-    private volatile CompletableFuture<HttpResponse<String>> jwkSetRequest;
+    private volatile CompletableFuture<List<JWK>> jwkSetRequest;
     HttpClient httpClient;
     ScheduledExecutorService backgroundThread;
     @PostConstruct
@@ -104,15 +104,15 @@ public class KidMapper {
                                 .orElseGet(HashSet::new);
         ofNullable(config.read("issuer.default", config.read(Names.ISSUER, null))).ifPresent(defaultIssuers::add);
         jwksUrl = config.read("mp.jwt.verify.publickey.location", null);
+        readerFactory = Json.createReaderFactory(emptyMap());
         ofNullable(jwksUrl).ifPresent(url -> {
             backgroundThread = Executors.newSingleThreadScheduledExecutor();
             httpClient = HttpClient.newBuilder().executor(backgroundThread).build();
             long SECONDS_REFRESH = getJwksRefreshInterval();
-            backgroundThread.scheduleAtFixedRate(this::reloadRemoteKeys, 1,SECONDS_REFRESH, TimeUnit.SECONDS );
-            reloadRemoteKeys();
+            backgroundThread.scheduleAtFixedRate(this::reloadRemoteKeys, getJwksRefreshInterval(),SECONDS_REFRESH, TimeUnit.SECONDS );
+            reloadRemoteKeys(); // inital load, otherwise the background thread is too slow to start and serve
         });
         defaultKey = config.read("public-key.default", config.read(Names.VERIFIER_PUBLIC_KEY, null));
-        readerFactory = Json.createReaderFactory(emptyMap());
     }
 
     private long getJwksRefreshInterval() {
@@ -122,7 +122,12 @@ public class KidMapper {
 
     private void reloadRemoteKeys() {
         HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create(jwksUrl)).header("Accept", "application/json").build();
-        jwkSetRequest =  httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        CompletableFuture<HttpResponse<String>> httpResponseCompletableFuture = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        jwkSetRequest = httpResponseCompletableFuture.thenApply(result -> {
+            List<JWK> jwks = parseKeys(result);
+            jwks.forEach(key -> keyMapping.put(key.getKid(),key.toPemKey()));
+            return jwks;
+        });
     }
 
     public String loadKey(final String property) {
@@ -165,23 +170,25 @@ public class KidMapper {
 
         // load jwks via url
         if (jwksUrl != null) {
-            try {
-                HttpResponse<String> resposne = jwkSetRequest.get(1, TimeUnit.MINUTES);
-                List<JWK> jwks = parseKeys(resposne);
-                jwks.forEach(jwk -> keyMapping.put(jwk.getKid(), jwk.toPemKey()));
+            if(jwkSetRequest != null) {
+                try {
+                    jwkSetRequest.get(1, TimeUnit.MINUTES);
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    throw new RuntimeException(e);
+                }
+            }
                 String key = keyMapping.get(value);
                 if (key != null) {
                     return key;
                 }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                throw new RuntimeException(e);
-            }
+
         }
         return value;
     }
 
     private List<JWK> parseKeys(HttpResponse<String> keyResponse) {
-        JsonReader jwksReader = readerFactory.createReader(new StringReader(keyResponse.body()));
+        StringReader stringReader = new StringReader(keyResponse.body());
+        JsonReader jwksReader = readerFactory.createReader(stringReader);
         JsonObject keySet = jwksReader.readObject();
         JsonArray keys = keySet.getJsonArray("keys");
         return keys.stream()
