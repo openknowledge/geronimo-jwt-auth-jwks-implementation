@@ -41,20 +41,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -74,7 +62,7 @@ public class KidMapper {
     private String jwksUrl;
     private Set<String> defaultIssuers;
     private JsonReaderFactory readerFactory;
-    private volatile CompletableFuture<List<JWK>> jwkSetRequest;
+    private volatile CompletableFuture<Void> reloadJwksRequest;
     HttpClient httpClient;
     ScheduledExecutorService backgroundThread;
     @PostConstruct
@@ -106,28 +94,43 @@ public class KidMapper {
         jwksUrl = config.read("mp.jwt.verify.publickey.location", null);
         readerFactory = Json.createReaderFactory(emptyMap());
         ofNullable(jwksUrl).ifPresent(url -> {
-            backgroundThread = Executors.newSingleThreadScheduledExecutor();
-            httpClient = HttpClient.newBuilder().executor(backgroundThread).build();
-            long SECONDS_REFRESH = getJwksRefreshInterval();
-            backgroundThread.scheduleAtFixedRate(this::reloadRemoteKeys, getJwksRefreshInterval(),SECONDS_REFRESH, TimeUnit.SECONDS );
-            reloadRemoteKeys(); // inital load, otherwise the background thread is too slow to start and serve
+            HttpClient.Builder builder = HttpClient.newBuilder();
+            if(getJwksRefreshInterval() != null){
+                builder.executor(backgroundThread);
+                long secondsRefresh = getJwksRefreshInterval();
+                backgroundThread = Executors.newSingleThreadScheduledExecutor();
+                backgroundThread.scheduleAtFixedRate(this::reloadRemoteKeys, getJwksRefreshInterval(), secondsRefresh, TimeUnit.SECONDS );
+            }
+            httpClient = builder.build();
+            reloadJwksRequest = reloadRemoteKeys();// inital load, otherwise the background thread is too slow to start and serve
         });
         defaultKey = config.read("public-key.default", config.read(Names.VERIFIER_PUBLIC_KEY, null));
     }
 
-    private long getJwksRefreshInterval() {
-        String interval = config.read("jwks.invalidationInterval","600");
-        return Integer.parseInt(interval);
+    private Integer getJwksRefreshInterval() {
+        String interval = config.read("jwks.invalidationInterval",null);
+        if (interval != null) {
+            return Integer.parseInt(interval);
+        } else {
+            return null;
+        }
     }
 
-    private void reloadRemoteKeys() {
+    private CompletableFuture<Void> reloadRemoteKeys() {
         HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create(jwksUrl)).header("Accept", "application/json").build();
         CompletableFuture<HttpResponse<String>> httpResponseCompletableFuture = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
-        jwkSetRequest = httpResponseCompletableFuture.thenApply(result -> {
+        CompletableFuture<Void> ongoingRequest = httpResponseCompletableFuture.thenApply(result -> {
             List<JWK> jwks = parseKeys(result);
-            jwks.forEach(key -> keyMapping.put(key.getKid(),key.toPemKey()));
-            return jwks;
+            ConcurrentHashMap<String, String> newKeys = new ConcurrentHashMap<>();
+            jwks.forEach(key -> newKeys.put(key.getKid(), key.toPemKey()));
+            keyMapping = newKeys;
+            return null;
         });
+
+        ongoingRequest.thenRun(() -> {
+            reloadJwksRequest = ongoingRequest;
+        });
+        return ongoingRequest;
     }
 
     public String loadKey(final String property) {
@@ -170,10 +173,10 @@ public class KidMapper {
 
         // load jwks via url
         if (jwksUrl != null) {
-            if(jwkSetRequest != null) {
+            if(reloadJwksRequest != null) {
                 try {
-                    jwkSetRequest.get(1, TimeUnit.MINUTES);
-                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    reloadJwksRequest.get();
+                } catch (InterruptedException | ExecutionException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -200,14 +203,11 @@ public class KidMapper {
 
     @PreDestroy
     private void destroy() {
-        if(backgroundThread != null) {
+        if (backgroundThread != null) {
             backgroundThread.shutdown();
         }
-        if(jwkSetRequest != null && !jwkSetRequest.isDone()){
-            try {
-                jwkSetRequest.get(1, TimeUnit.MINUTES);
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            }
+        if (reloadJwksRequest != null) {
+            reloadJwksRequest.cancel(true);
         }
     }
 
