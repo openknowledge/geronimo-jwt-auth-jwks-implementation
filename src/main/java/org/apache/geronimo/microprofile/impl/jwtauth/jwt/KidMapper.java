@@ -95,10 +95,10 @@ public class KidMapper {
         readerFactory = Json.createReaderFactory(emptyMap());
         ofNullable(jwksUrl).ifPresent(url -> {
             HttpClient.Builder builder = HttpClient.newBuilder();
-            if(getJwksRefreshInterval() != null){
-                builder.executor(backgroundThread);
+            if (getJwksRefreshInterval() != null) {
                 long secondsRefresh = getJwksRefreshInterval();
                 backgroundThread = Executors.newSingleThreadScheduledExecutor();
+                builder.executor(backgroundThread);
                 backgroundThread.scheduleAtFixedRate(this::reloadRemoteKeys, getJwksRefreshInterval(), secondsRefresh, TimeUnit.SECONDS );
             }
             httpClient = builder.build();
@@ -108,7 +108,7 @@ public class KidMapper {
     }
 
     private Integer getJwksRefreshInterval() {
-        String interval = config.read("jwks.invalidationInterval",null);
+        String interval = config.read("jwks.invalidation.interval",null);
         if (interval != null) {
             return Integer.parseInt(interval);
         } else {

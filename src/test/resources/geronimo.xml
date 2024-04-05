@@ -15,6 +15,7 @@
   <test name="Tests">
     <classes>
       <class name="org.apache.geronimo.microprofile.impl.jwtauth.jwt.KidMapperTest" />
+      <class name="org.apache.geronimo.microprofile.impl.jwtauth.jwt.RefreshIntervalTest" />
     </classes>
   </test>
 </suite>
